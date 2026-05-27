@@ -1,0 +1,25 @@
+MetaTrader5
+pandas
+numpy
+ta
+xgboost
+# tensorflow optional
+
+lightgbm
+flask
+yfinance
+scikit-learn
+python-telegram-bot==20.7
+fastapi
+uvicorn
+websockets
+plotly
+dash
+redis
+python-dotenv
+joblib
+schedule
+twilio
+aiohttp
+jinja2
+SQLAlchemy
