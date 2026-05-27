@@ -10,13 +10,11 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
-# Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AI Trading System", version="3.0.0")
 
-# Enable CORS for online access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,7 +24,6 @@ app.add_middleware(
 )
 
 
-# Store active connections
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
@@ -34,33 +31,31 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        logger.info(f"Client connected. Total: {len(self.active_connections)}")
+        logger.info("Client connected. Total: %s", len(self.active_connections))
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-        logger.info(f"Client disconnected. Remaining: {len(self.active_connections)}")
+        logger.info("Client disconnected. Remaining: %s", len(self.active_connections))
 
     async def broadcast(self, message: dict):
         for connection in list(self.active_connections):
             try:
                 await connection.send_json(message)
             except Exception:
-                # If the connection is broken, drop it
                 self.disconnect(connection)
 
 
 manager = ConnectionManager()
 
 
-# Market Data Engine
 class MarketDataEngine:
     def __init__(self):
         self.current_price = 2650.00
         self.price_history: List[float] = []
 
-    def get_live_price(self):
-        """Get live price from Yahoo Finance"""
+    def get_live_price(self) -> float:
+        """Fetch live price from Yahoo Finance. Falls back to simulated prices."""
         try:
             ticker = yf.Ticker("GC=F")
             df = ticker.history(period="1d", interval="1m")
@@ -71,7 +66,7 @@ class MarketDataEngine:
                     self.price_history.pop(0)
                 return self.current_price
         except Exception as e:
-            logger.error(f"Price fetch error: {e}")
+            logger.error("Price fetch error: %s", e)
 
         # Fallback to simulated
         change = (np.random.random() - 0.5) * 1.5
@@ -82,7 +77,7 @@ class MarketDataEngine:
             self.price_history.pop(0)
         return self.current_price
 
-    def get_market_data(self):
+    def get_market_data(self) -> dict:
         price = self.get_live_price()
 
         if len(self.price_history) > 1:
@@ -103,7 +98,7 @@ class MarketDataEngine:
             "change": change_pct,
             "high": high,
             "low": low,
-            "volume": int(np.random.randint(1000000, 5000000)),
+            "volume": int(np.random.randint(1_000_000, 5_000_000)),
             "spread": float(round(np.random.uniform(10, 25), 1)),
         }
 
@@ -111,9 +106,7 @@ class MarketDataEngine:
 market_engine = MarketDataEngine()
 
 
-# BACKGROUND TASKS
 async def market_broadcaster():
-    """Broadcast market data to all connected clients"""
     while True:
         try:
             market_data = market_engine.get_market_data()
@@ -126,15 +119,14 @@ async def market_broadcaster():
             )
             await asyncio.sleep(1)
         except Exception as e:
-            logger.error(f"Broadcaster error: {e}")
+            logger.error("Broadcaster error: %s", e)
             await asyncio.sleep(5)
 
 
 async def ai_broadcaster():
-    """Broadcast AI predictions"""
+    # Placeholder AI broadcaster; replace with real signals later.
     while True:
         try:
-            # Simulate AI predictions (replace with your real AI)
             import random
 
             actions = ["BUY", "HOLD", "SELL"]
@@ -173,11 +165,10 @@ async def ai_broadcaster():
             )
             await asyncio.sleep(5)
         except Exception as e:
-            logger.error(f"AI broadcaster error: {e}")
+            logger.error("AI broadcaster error: %s", e)
             await asyncio.sleep(5)
 
 
-# WEBSOCKET ENDPOINT
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
@@ -189,13 +180,13 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
 
 
-# API ENDPOINTS
 @app.get("/")
 async def root():
     return {
         "message": "AI Trading System Online",
         "status": "running",
         "version": "3.0.0",
+        "timestamp": datetime.now().isoformat(),
     }
 
 
@@ -220,8 +211,7 @@ async def api_buy(
     stop_loss: float | None = None,
     take_profit: float | None = None,
 ):
-    """Execute BUY order"""
-    logger.info(f"BUY order: {volume} lots")
+    logger.info("BUY order: %s lots", volume)
     return {
         "success": True,
         "order_id": f"ORD_{datetime.now().strftime('%Y%m%d%H%M%S')}",
@@ -236,8 +226,7 @@ async def api_sell(
     stop_loss: float | None = None,
     take_profit: float | None = None,
 ):
-    """Execute SELL order"""
-    logger.info(f"SELL order: {volume} lots")
+    logger.info("SELL order: %s lots", volume)
     return {
         "success": True,
         "order_id": f"ORD_{datetime.now().strftime('%Y%m%d%H%M%S')}",
@@ -246,17 +235,19 @@ async def api_sell(
     }
 
 
-# SERVING DASHBOARD
 @app.get("/dashboard")
 async def serve_dashboard():
-    with open("dashboard.html", "r", encoding="utf-8") as f:
+    # Use file path relative to repo root
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    dashboard_path = os.path.join(base_dir, "dashboard.html")
+    with open(dashboard_path, "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
 
 
-# STARTUP
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting AI Trading System...")
+    # Start broadcasters for live UI
     asyncio.create_task(market_broadcaster())
     asyncio.create_task(ai_broadcaster())
     logger.info("System online!")
@@ -265,5 +256,6 @@ async def startup_event():
 if __name__ == "__main__":
     import uvicorn
 
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.getenv("PORT", "8000"))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
