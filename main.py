@@ -3,12 +3,22 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
-import json
-import yfinance as yf
 import random
+import threading
+import pandas as pd
 from datetime import datetime
 from typing import List, Dict
 import logging
+from config import Config
+from social_trading_intelligence import SocialTradingDatabase, SocialIntelligenceEngine, social_simulation_loop
+from order_executor import MT5Broker
+from enhanced_auto_flip import AdvancedRiskManager, EnhancedFlipDetector
+
+try:
+    import MetaTrader5 as mt5
+    USE_MT5 = True
+except ImportError:
+    USE_MT5 = False
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,6 +37,8 @@ app.add_middleware(
 # Account state
 account_balance = 10000.00
 daily_pnl = 46.90
+total_pnl = 1250.45
+win_rate = 68.2
 drawdown = 0.7
 positions = []
 
@@ -90,15 +102,22 @@ async def root():
         "timestamp": datetime.now().isoformat()
     }
 
-@app.get("/health")
-async def health():
+@app.get("/api/health")
+async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "connections": len(active_connections),
         "price": market_engine.price,
-        "balance": account_balance
+        "balance": account_balance,
     }
+
+
+# Backwards-compatible alias
+@app.get("/health")
+async def health():
+    return await health_check()
+
 
 @app.get("/api/account")
 async def get_account():
