@@ -66,12 +66,19 @@ def market_loop():
         mt5.initialize()
 
     while True:
+        # Always initialize these so JSON emit never crashes the loop
+        high = price + 2
+        low = price - 2
+        spread = 2.0
+
         if USE_MT5:
             tick = mt5.symbol_info_tick(symbol)
             if tick:
                 price = tick.bid
-                high = mt5.symbol_info(symbol).session_high
-                low = mt5.symbol_info(symbol).session_low
+                sym_info = mt5.symbol_info(symbol)
+                if sym_info:
+                    high = sym_info.session_high
+                    low = sym_info.session_low
                 spread = round((tick.ask - tick.bid) * 10, 1) # Convert to pips
                 
                 acc = mt5.account_info()
