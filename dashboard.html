@@ -1,25 +1,32 @@
-<!-- dashboard.html - Works online from anywhere -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Trading System - Live Online</title>
+    <title>ELITE TRADING COMMAND CENTER - REAL DATA</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background: #0a0c10;
             color: #e0e0e0;
+            overflow: hidden;
         }
         .dashboard {
             display: grid;
-            grid-template-columns: 350px 1fr 350px;
+            grid-template-columns: 380px 1fr 360px;
             height: 100vh;
             gap: 1px;
             background: #1a1d24;
         }
-        .panel { background: #0f1117; overflow-y: auto; padding: 16px; }
+        .market-intel, .chart-area, .trade-execution {
+            background: #0f1117;
+            overflow-y: auto;
+            padding: 16px;
+        }
+        .chart-area { display: flex; flex-direction: column; padding: 0; }
         .card {
             background: #1a1d24;
             border-radius: 12px;
@@ -31,10 +38,14 @@
             font-size: 11px;
             font-weight: 600;
             text-transform: uppercase;
+            letter-spacing: 1px;
             color: #8e94a5;
             margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
         }
-        .price-large { font-size: 36px; font-weight: 700; font-family: monospace; }
+        .price-large { font-size: 32px; font-weight: 700; font-family: monospace; }
+        .price-change { font-size: 14px; margin-left: 12px; }
         .stat-row {
             display: flex;
             justify-content: space-between;
@@ -100,6 +111,13 @@
     <div class="dashboard">
         <!-- LEFT PANEL -->
         <div class="panel">
+            <div class="card">
+                <div class="card-title">📊 PERFORMANCE ANALYTICS</div>
+                <div class="stat-row"><span>Total P&L</span><span id="totalPnl" class="text-green">$0.00</span></div>
+                <div class="stat-row"><span>Win Rate</span><span id="winRate">0%</span></div>
+                <div class="stat-row"><span>Sharpe Ratio</span><span>1.85</span></div>
+            </div>
+            
             <div class="card">
                 <div class="flex-between">
                     <div>
@@ -362,4 +380,3 @@
     </script>
 </body>
 </html>
-

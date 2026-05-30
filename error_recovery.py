@@ -1,41 +1,100 @@
+# core/error_recovery.py
 import time
-import logging
 import traceback
+import signal
+import sys
 from functools import wraps
-
-logger = logging.getLogger(__name__)
-
-def resilient(func):
-    """Decorator to catch exceptions and log full tracebacks without crashing the main loop."""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            logger.error(f"Critical error in {func.__name__}: {str(e)}")
-            logger.error(traceback.format_exc())
-            return None
-    return wrapper
+from typing import Callable
+from core.logger import logger
 
 class BotSupervisor:
-    """Supervises the trading bot and handles auto-restarts on failure."""
+    """Monitors and restarts the bot on failures"""
     
-    def __init__(self, bot_instance):
-        self.bot = bot_instance
-        self.max_retries = 5
-        self.retry_delay = 15 # seconds
-
-    def run_forever(self):
-        logger.info("Supervisor: Starting bot health monitoring...")
-        while True:
+    def __init__(self):
+        self.attempts = 0
+        self.max_attempts = 5
+        self.is_running = True
+        self.setup_signal_handlers()
+    
+    def setup_signal_handlers(self):
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
+    
+    def _signal_handler(self, signum, frame):
+        logger.info(f"Received signal {signum}, shutting down...")
+        self.is_running = False
+        sys.exit(0)
+    
+    def run_with_recovery(self, bot_function: Callable, *args, **kwargs):
+        """Run bot with automatic recovery on crashes"""
+        while self.is_running:
             try:
-                # This assumes the bot has a non-blocking or managed loop
-                self.bot.run()
+                self.attempts = 0
+                bot_function(*args, **kwargs)
+                
             except KeyboardInterrupt:
-                logger.info("Manual shutdown detected.")
+                logger.info("Bot stopped by user")
                 break
+                
             except Exception as e:
-                logger.error(f"Bot Supervisor detected crash: {e}. Restarting in {self.retry_delay}s...")
-                time.sleep(self.retry_delay)
-                # Re-initialize connection if necessary
-                self.bot.initialize()
+                self.attempts += 1
+                logger.critical(f"Bot crashed: {e}")
+                logger.critical(traceback.format_exc())
+                
+                if self.attempts >= self.max_attempts:
+                    logger.critical(f"Max attempts ({self.max_attempts}) reached. Giving up.")
+                    break
+                
+                wait_time = 10 * self.attempts
+                logger.info(f"Restarting in {wait_time} seconds... (Attempt {self.attempts}/{self.max_attempts})")
+                time.sleep(wait_time)
+
+def resilient(max_retries: int = 3, delay: int = 5):
+    """Decorator for resilient function calls"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    logger.warning(f"Attempt {attempt + 1} failed for {func.__name__}: {e}")
+                    if attempt == max_retries - 1:
+                        raise
+                    time.sleep(delay)
+            return None
+        return wrapper
+    return decorator
+
+class CircuitBreaker:
+    """Circuit breaker pattern to prevent cascading failures"""
+    
+    def __init__(self, failure_threshold=5, timeout=60):
+        self.failure_threshold = failure_threshold
+        self.timeout = timeout
+        self.failures = 0
+        self.last_failure_time = 0
+        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
+    
+    def call(self, func, *args, **kwargs):
+        if self.state == "OPEN":
+            if time.time() - self.last_failure_time > self.timeout:
+                self.state = "HALF_OPEN"
+            else:
+                raise Exception("Circuit breaker is OPEN")
+        
+        try:
+            result = func(*args, **kwargs)
+            if self.state == "HALF_OPEN":
+                self.state = "CLOSED"
+                self.failures = 0
+            return result
+            
+        except Exception as e:
+            self.failures += 1
+            self.last_failure_time = time.time()
+            
+            if self.failures >= self.failure_threshold:
+                self.state = "OPEN"
+                logger.warning(f"Circuit breaker OPEN for {func.__name__}")
+            raise e
