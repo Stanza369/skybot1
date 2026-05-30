@@ -1,25 +1,11 @@
-# TODO - PR hardening for skybot
+- [ ] Inspect current elite-dashboard integration points (done: read dashboard.html/script_elite.js/style.css/main.py/mt5_service.py)
+- [x] Plan approved for production-grade persistence + risk + Telegram wiring
+- [ ] Remove remaining simulations in elite UI (frontend): replace `elite_bridge.js` simulated AI votes/proxies with real backend signals
+- [x] Fix close-persistence: ensure `ProductionTradingBot.close_trade()` updates correct DB row (ticket vs order_id mismatch)
 
-## Step 1: Fix merge conflicts
-- [x] Clean `main.py` by removing all `<<<<<<< HEAD` / `=======` / `>>>>>>>` conflict markers.
-- [x] Keep the FastAPI dashboard/WebSocket implementation (matches repo’s `tests/unit/test_smoke.py` expectations).
-
-## Step 2: Fix dependencies
-- [x] Clean `requirements.txt` by removing all conflict markers.
-- [x] Pin FastAPI stack deps used by `main.py` and `tests`.
-
-
-## Step 3: Verify tests locally
-- [ ] Run `pip install -r requirements.txt`.
-- [ ] Run `pytest -q`.
-
-## Step 4: CI alignment
-- [ ] Ensure `.github/workflows/trading-bot.yml` installs dependencies correctly.
-- [ ] If needed, adjust test step to not require extra deps beyond requirements.
-
-## Step 5: Commit + PR preparation
-- [ ] Create branch `blackboxai/<name>`.
-- [ ] Commit with message.
-- [ ] Push branch.
-- [ ] Open PR on GitHub.
+- [ ] Make account metrics real: patch `trading-dashboard/backend/mt5_service.py::account_info()` to fetch actual MT5 margin/free_margin/equity
+- [ ] Add backend AI signal endpoint (real indicator/model execution) and wire frontend
+- [ ] Verify WS/candles feed matches dashboard chart expectations
+- [ ] Smoke test end-to-end: connect MT5 → place order → close order → verify DB row + UI updates
+- [ ] Run existing tests (risk/strategy)
 
