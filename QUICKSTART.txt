@@ -1,0 +1,66 @@
+# QUICK START - 30 Seconds to Running
+
+## 1. Validate (10 seconds)
+```bash
+python validate.py
+```
+Expected: `SUMMARY: 7/7 test groups passed`
+
+## 2. Start (5 seconds)
+```bash
+python run.py
+```
+Expected: `Starting server... Dashboard: http://localhost:5000/dashboard`
+
+## 3. Trade (5 seconds)
+```
+Open: http://localhost:5000/dashboard
+Login: admin / admin123
+Click BUY (0.05 lots)
+Check Activity Log ✓
+```
+
+---
+
+## System Ready? Check This
+
+| Item | Status | Fix |
+|------|--------|-----|
+| Python 3.8+ | `python --version` | [Install Python](https://www.python.org) |
+| Dependencies | `pip list \| grep flask` | `pip install flask flask-socketio pandas` |
+| Validation | `python validate.py` | Should show 7/7 pass |
+| Server starts | `python run.py` | Should start without errors |
+| Dashboard loads | Browser: http://localhost:5000/dashboard | Check firewall/ports |
+
+---
+
+## Next Steps
+
+**This Week:**
+```
+python validate.py   # Validate
+python run.py        # Start server
+# Test with 0.01 lots on demo
+# Monitor for 24 hours
+```
+
+**Next Week:**
+```
+# Add MT5 account credentials
+# Test with real market data
+# Verify risk controls
+# Scale to 0.05 lots if good
+```
+
+---
+
+## Getting Help
+
+1. **System crashes?** → Run `python validate.py`
+2. **Dashboard won't load?** → Clear cache (Ctrl+Shift+Delete)
+3. **Orders fail?** → Check MT5 connection
+4. **Still stuck?** → Check DEPLOYMENT.md (100+ Q&A)
+
+---
+
+**Status: MVP READY - All systems operational**
