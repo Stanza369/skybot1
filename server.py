@@ -8,6 +8,11 @@ from datetime import datetime
 import json
 import pandas as pd
 from social_trading_intelligence import SocialTradingDatabase, SocialIntelligenceEngine, social_simulation_loop
+from ai_inference import AIInferenceEngine
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 try:
     import MetaTrader5 as mt5
@@ -72,6 +77,14 @@ threading.Thread(target=social_simulation_loop, args=(social_db,), daemon=True).
 # Trade endpoints will create an MT5 connection on-demand using MT5BrokerManager.
 mt5_manager = MT5BrokerManager(symbol="XAUUSD") if USE_MT5 else None
 
+# Initialize AI Inference Engine (loads trained models if available)
+try:
+    ai_engine = AIInferenceEngine()
+    logger.info("AI Inference Engine initialized")
+except Exception as e:
+    logger.warning(f"AI Engine failed to initialize: {e}. Using fallback signals.")
+    ai_engine = None
+
 
 
 # AI State
@@ -125,45 +138,83 @@ def market_loop():
                 if rates is not None and len(rates) >= 50:
                     df = pd.DataFrame(rates)
                     closes = df['close'].astype(float)
-                    
-                    # EMA Cross Prediction (Trend AI)
-                    ema_fast = closes.ewm(span=9, adjust=False).mean().iloc[-1]
-                    ema_slow = closes.ewm(span=21, adjust=False).mean().iloc[-1]
-                    ai_state['trend_action'] = 'BUY' if ema_fast > ema_slow else 'SELL'
-                    ai_state['trend_confidence'] = min(95, int(65 + abs(ema_fast - ema_slow) * 10))
-                    
-                    # RSI Sentiment logic (Sentiment AI)
-                    delta = closes.diff()
-                    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-                    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-                    rs = gain / (loss + 1e-9)
-                    rsi_val = (100 - (100 / (1 + rs))).iloc[-1]
-                    
-                    if rsi_val > 70:
-                        ai_state['sentiment_action'] = 'SELL'
-                        ai_state['sentiment_confidence'] = min(95, int(rsi_val))
-                    elif rsi_val < 30:
-                        ai_state['sentiment_action'] = 'BUY'
-                        ai_state['sentiment_confidence'] = min(95, int(100 - rsi_val))
-                    else:
-                        ai_state['sentiment_action'] = 'HOLD'
-                        ai_state['sentiment_confidence'] = 50
+                    highs = df['high'].astype(float)
+                    lows = df['low'].astype(float)
+                    opens = df['open'].astype(float)
 
-                    # Bollinger Bands (Volatility AI)
-                    sma_20 = closes.rolling(window=20).mean()
-                    std_20 = closes.rolling(window=20).std()
-                    upper_band = sma_20 + (std_20 * 2)
-                    lower_band = sma_20 - (std_20 * 2)
+                    # Use AI Inference Engine if available
+                    if ai_engine:
+                        try:
+                            volatility = closes.std() / closes.mean()
+                            market_data = {
+                                'close': closes.tolist(),
+                                'high': highs.tolist(),
+                                'low': lows.tolist(),
+                                'open': opens.tolist(),
+                                'volatility': volatility
+                            }
 
-                    if closes.iloc[-1] > upper_band.iloc[-1]:
-                        ai_state['volatility_action'] = 'SELL'
-                        ai_state['volatility_confidence'] = min(95, int(70 + (closes.iloc[-1] - upper_band.iloc[-1]) / (std_20.iloc[-1] + 1e-9) * 20))
-                    elif closes.iloc[-1] < lower_band.iloc[-1]:
-                        ai_state['volatility_action'] = 'BUY'
-                        ai_state['volatility_confidence'] = min(95, int(70 + (lower_band.iloc[-1] - closes.iloc[-1]) / (std_20.iloc[-1] + 1e-9) * 20))
+                            # Get AI prediction
+                            ai_prediction = ai_engine.predict(market_data)
+
+                            # Update AI state with real predictions
+                            ai_state['trend_action'] = ai_prediction['direction']
+                            ai_state['trend_confidence'] = int(ai_prediction['confidence'])
+                            ai_state['volatility_action'] = 'BUY' if ai_prediction['regime'] == 'mean_reverting' else 'SELL' if ai_prediction['regime'] == 'trending' else 'HOLD'
+                            ai_state['volatility_confidence'] = ai_prediction['risk_score']
+                            ai_state['sentiment_action'] = ai_prediction['lstm_signal']
+                            ai_state['sentiment_confidence'] = int(ai_prediction['lstm_prob'] * 100)
+                            ai_state['orderflow_action'] = ai_prediction['transformer_signal']
+                            ai_state['orderflow_confidence'] = int(ai_prediction['transformer_prob'] * 100)
+
+                            logger.debug(f"AI Prediction: {ai_prediction['direction']} (confidence={ai_prediction['confidence']:.1f}%, regime={ai_prediction['regime']})")
+
+                        except Exception as e:
+                            logger.warning(f"AI prediction failed: {e}, using EMA fallback")
+                            # Fallback to EMA cross
+                            ema_fast = closes.ewm(span=9, adjust=False).mean().iloc[-1]
+                            ema_slow = closes.ewm(span=21, adjust=False).mean().iloc[-1]
+                            ai_state['trend_action'] = 'BUY' if ema_fast > ema_slow else 'SELL'
+                            ai_state['trend_confidence'] = min(95, int(65 + abs(ema_fast - ema_slow) * 10))
                     else:
-                        ai_state['volatility_action'] = 'HOLD'
-                        ai_state['volatility_confidence'] = 50
+                        # Fallback to traditional indicators (EMA Cross)
+                        ema_fast = closes.ewm(span=9, adjust=False).mean().iloc[-1]
+                        ema_slow = closes.ewm(span=21, adjust=False).mean().iloc[-1]
+                        ai_state['trend_action'] = 'BUY' if ema_fast > ema_slow else 'SELL'
+                        ai_state['trend_confidence'] = min(95, int(65 + abs(ema_fast - ema_slow) * 10))
+
+                        # RSI Sentiment logic
+                        delta = closes.diff()
+                        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                        rs = gain / (loss + 1e-9)
+                        rsi_val = (100 - (100 / (1 + rs))).iloc[-1]
+
+                        if rsi_val > 70:
+                            ai_state['sentiment_action'] = 'SELL'
+                            ai_state['sentiment_confidence'] = min(95, int(rsi_val))
+                        elif rsi_val < 30:
+                            ai_state['sentiment_action'] = 'BUY'
+                            ai_state['sentiment_confidence'] = min(95, int(100 - rsi_val))
+                        else:
+                            ai_state['sentiment_action'] = 'HOLD'
+                            ai_state['sentiment_confidence'] = 50
+
+                        # Bollinger Bands (Volatility AI)
+                        sma_20 = closes.rolling(window=20).mean()
+                        std_20 = closes.rolling(window=20).std()
+                        upper_band = sma_20 + (std_20 * 2)
+                        lower_band = sma_20 - (std_20 * 2)
+
+                        if closes.iloc[-1] > upper_band.iloc[-1]:
+                            ai_state['volatility_action'] = 'SELL'
+                            ai_state['volatility_confidence'] = min(95, int(70 + (closes.iloc[-1] - upper_band.iloc[-1]) / (std_20.iloc[-1] + 1e-9) * 20))
+                        elif closes.iloc[-1] < lower_band.iloc[-1]:
+                            ai_state['volatility_action'] = 'BUY'
+                            ai_state['volatility_confidence'] = min(95, int(70 + (lower_band.iloc[-1] - closes.iloc[-1]) / (std_20.iloc[-1] + 1e-9) * 20))
+                        else:
+                            ai_state['volatility_action'] = 'HOLD'
+                            ai_state['volatility_confidence'] = 50
             else:
                 # Fallback to simulation logic if tick fails
                 price += (random.random() - 0.5)
