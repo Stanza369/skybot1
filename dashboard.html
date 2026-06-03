@@ -1,382 +1,180 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ELITE TRADING COMMAND CENTER - REAL DATA</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>Trading Dashboard</title>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: Arial, sans-serif;
             background: #0a0c10;
-            color: #e0e0e0;
-            overflow: hidden;
+            color: white;
+            padding: 20px;
         }
-        .dashboard {
-            display: grid;
-            grid-template-columns: 380px 1fr 360px;
-            height: 100vh;
-            gap: 1px;
-            background: #1a1d24;
-        }
-        .market-intel, .chart-area, .trade-execution {
-            background: #0f1117;
-            overflow-y: auto;
-            padding: 16px;
-        }
-        .chart-area { display: flex; flex-direction: column; padding: 0; }
+        .container { max-width: 1200px; margin: 0 auto; }
         .card {
             background: #1a1d24;
             border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
             border: 1px solid #2a2d34;
         }
-        .card-title {
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #8e94a5;
-            margin-bottom: 12px;
-            display: flex;
-            justify-content: space-between;
+        .price { font-size: 48px; font-weight: bold; color: #00ff88; }
+        .btn-buy, .btn-sell {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 5px;
         }
-        .price-large { font-size: 32px; font-weight: 700; font-family: monospace; }
-        .price-change { font-size: 14px; margin-left: 12px; }
+        .btn-buy { background: #00ff88; color: #0a0c10; }
+        .btn-sell { background: #ff4466; color: white; }
+        .flex-between { display: flex; justify-content: space-between; align-items: center; }
+        .mt-2 { margin-top: 10px; }
+        .text-green { color: #00ff88; }
+        .text-red { color: #ff4466; }
+        .logout-btn {
+            background: #ff4466;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: none;
+        }
         .stat-row {
             display: flex;
             justify-content: space-between;
             padding: 8px 0;
             border-bottom: 1px solid #2a2d34;
         }
-        .stat-label { color: #8e94a5; font-size: 12px; }
-        .stat-value { font-family: monospace; font-weight: 600; }
-        .positive { color: #00ff88; }
-        .negative { color: #ff4466; }
-        .btn-buy, .btn-sell {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 8px;
-            font-weight: 700;
-            cursor: pointer;
-            margin-bottom: 8px;
-        }
-        .btn-buy { background: #00ff88; color: #0a0c10; }
-        .btn-sell { background: #ff4466; color: white; }
-        .flex-between { display: flex; justify-content: space-between; align-items: center; }
-        .mt-1 { margin-top: 6px; }
-        .mt-2 { margin-top: 12px; }
-        .mb-1 { margin-bottom: 6px; }
-        .mb-2 { margin-bottom: 12px; }
-        .text-green { color: #00ff88; }
-        .text-red { color: #ff4466; }
-        .text-muted { color: #8e94a5; }
-        input, select {
-            background: #13161f;
+        select, input {
+            background: #0f1117;
             border: 1px solid #2a2d34;
             color: white;
             padding: 8px;
             border-radius: 6px;
-            width: 100%;
         }
-        .status-online { color: #00ff88; }
-        .status-offline { color: #ff4466; }
-        .ai-card {
-            background: #13161f;
-            border-radius: 8px;
-            padding: 10px;
-            margin-bottom: 8px;
-            border-left: 3px solid;
+        .activity-log {
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 12px;
         }
-        .ai-buy { border-left-color: #00ff88; }
-        .ai-sell { border-left-color: #ff4466; }
-        .ai-neutral { border-left-color: #ffaa00; }
-        .connection-badge {
-            padding: 4px 8px;
-            border-radius: 20px;
-            font-size: 10px;
-        }
-        .connected { background: #00ff88; color: #0a0c10; }
-        .disconnected { background: #ff4466; color: white; }
-        @media (max-width: 1200px) {
-            .dashboard { grid-template-columns: 1fr; height: auto; }
+        .activity-item {
+            padding: 5px 0;
+            border-bottom: 1px solid #2a2d34;
         }
     </style>
 </head>
 <body>
-    <div class="dashboard">
-        <!-- LEFT PANEL -->
-        <div class="panel">
-            <div class="card">
-                <div class="card-title">📊 PERFORMANCE ANALYTICS</div>
-                <div class="stat-row"><span>Total P&L</span><span id="totalPnl" class="text-green">$0.00</span></div>
-                <div class="stat-row"><span>Win Rate</span><span id="winRate">0%</span></div>
-                <div class="stat-row"><span>Sharpe Ratio</span><span>1.85</span></div>
-            </div>
-            
-            <div class="card">
-                <div class="flex-between">
-                    <div>
-                        <span class="price-large" id="currentPrice">--</span>
-                        <span id="priceChange" style="font-size: 14px;">--</span>
-                    </div>
-                    <div>
-                        <span id="connectionStatus" class="connection-badge disconnected">CONNECTING</span>
-                    </div>
-                </div>
-                <div class="flex-between mt-1">
-                    <span class="text-muted">High: <span id="dailyHigh">--</span></span>
-                    <span class="text-muted">Low: <span id="dailyLow">--</span></span>
-                    <span class="text-muted">Volume: <span id="volume">--</span></span>
-                </div>
-            </div>
-            
-            <div class="card">
-                <div class="card-title">💰 ACCOUNT</div>
-                <div class="stat-row"><span class="stat-label">Balance</span><span id="balance" class="stat-value">$10,000</span></div>
-                <div class="stat-row"><span class="stat-label">Equity</span><span id="equity" class="stat-value">$10,000</span></div>
-                <div class="stat-row"><span class="stat-label">Spread</span><span id="spreadValue" class="stat-value">--</span></div>
-            </div>
-            
-            <div class="card">
-                <div class="card-title">🤖 AI SWARM</div>
-                <div id="aiContainer"></div>
-                <div class="mt-2 pt-2" style="border-top: 1px solid #2a2d34;">
-                    <div class="flex-between">
-                        <span class="text-muted">FINAL CONSENSUS</span>
-                        <span id="finalConsensus" class="text-green">HOLD</span>
-                    </div>
-                </div>
+    <div class="container">
+        <div class="flex-between" style="margin-bottom: 20px;">
+            <h1>🤖 AI Trading Dashboard</h1>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+        
+        <div class="card">
+            <div class="price" id="price">$---</div>
+            <div class="flex-between mt-2">
+                <span>Spread: <span id="spread">--</span> pips</span>
+                <span>Volume: <span id="volume-display">--</span></span>
             </div>
         </div>
         
-        <!-- CENTER PANEL -->
-        <div class="panel">
-            <div class="card">
-                <div class="flex-between">
-                    <span style="font-weight: 700;">XAUUSD</span>
-                    <span class="text-muted">Live | M5</span>
-                </div>
-            </div>
-            
-            <div class="card">
-                <div class="card-title">🛡️ RISK METRICS</div>
-                <div class="stat-row"><span class="stat-label">Drawdown</span><span id="drawdown" class="stat-value">0.0%</span></div>
-                <div class="stat-row"><span class="stat-label">Daily P&L</span><span id="dailyPnl" class="stat-value">$0.00</span></div>
-                <div class="stat-row"><span class="stat-label">Win Rate</span><span id="winRate" class="stat-value">0%</span></div>
+        <div class="card">
+            <h3>💰 Account</h3>
+            <div class="stat-row"><span>Balance</span><span id="balance">$0.00</span></div>
+            <div class="stat-row"><span>Equity</span><span id="equity">$0.00</span></div>
+            <div class="stat-row"><span>AI Signal</span><span id="signal" class="text-green">HOLD</span></div>
+        </div>
+        
+        <div class="card">
+            <h3>🔴 Execute Trade</h3>
+            <div class="flex-between">
+                <select id="trade-volume">
+                    <option>0.01</option>
+                    <option selected>0.05</option>
+                    <option>0.10</option>
+                    <option>0.25</option>
+                </select>
+                <button class="btn-buy" id="buyBtn">BUY</button>
+                <button class="btn-sell" id="sellBtn">SELL</button>
             </div>
         </div>
         
-        <!-- RIGHT PANEL -->
-        <div class="panel">
-            <div class="card">
-                <div class="card-title">🔴 TRADE</div>
-                <div class="flex-between mb-1">
-                    <span class="text-muted">Volume (lots)</span>
-                    <select id="tradeVolume" style="width: 120px;">
-                        <option>0.01</option>
-                        <option selected>0.05</option>
-                        <option>0.10</option>
-                        <option>0.25</option>
-                        <option>0.50</option>
-                    </select>
-                </div>
-                <div class="flex-between mb-1">
-                    <span class="text-muted">Stop Loss</span>
-                    <input type="text" id="stopLoss" placeholder="Auto" style="width: 120px;">
-                </div>
-                <div class="flex-between mb-2">
-                    <span class="text-muted">Take Profit</span>
-                    <input type="text" id="takeProfit" placeholder="Auto" style="width: 120px;">
-                </div>
-                <button class="btn-buy" id="buyBtn">BUY MARKET</button>
-                <button class="btn-sell" id="sellBtn">SELL MARKET</button>
-            </div>
-            
-            <div class="card">
-                <div class="card-title">📈 POSITIONS</div>
-                <div id="positionsContainer">
-                    <div class="text-muted" style="text-align: center;">No open positions</div>
-                </div>
-            </div>
-            
-            <div class="card">
-                <div class="card-title">🔔 ALERTS</div>
-                <div id="alertsContainer" style="max-height: 200px; overflow-y: auto;"></div>
-            </div>
+        <div class="card">
+            <h3>📋 Activity</h3>
+            <div id="log" class="activity-log"></div>
         </div>
     </div>
     
     <script>
-        // WebSocket connection
-        let ws = null;
-        let reconnectAttempts = 0;
+        let socket = io();
         
-        function connectWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws`;
+        socket.on('market_update', (data) => {
+            document.getElementById('price').innerHTML = `$${data.price.toFixed(2)}`;
+            document.getElementById('spread').innerHTML = data.spread;
+            document.getElementById('volume-display').innerHTML = data.volume;
             
-            ws = new WebSocket(wsUrl);
-            
-            ws.onopen = () => {
-                console.log('WebSocket connected');
-                document.getElementById('connectionStatus').innerHTML = 'ONLINE';
-                document.getElementById('connectionStatus').className = 'connection-badge connected';
-                addAlert('🟢 Connected to trading server', 'success');
-                reconnectAttempts = 0;
-            };
-            
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                handleMessage(data);
-            };
-            
-            ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                document.getElementById('connectionStatus').innerHTML = 'ERROR';
-            };
-            
-            ws.onclose = () => {
-                console.log('WebSocket disconnected');
-                document.getElementById('connectionStatus').innerHTML = 'RECONNECTING';
-                reconnectAttempts++;
-                setTimeout(connectWebSocket, Math.min(3000 * reconnectAttempts, 30000));
-            };
-        }
-        
-        function handleMessage(data) {
-            if (data.type === 'market_update') {
-                updateMarketUI(data.data);
-            } else if (data.type === 'ai_update') {
-                updateAIUI(data.data);
+            // Simple AI signal
+            if (data.price > 2650) {
+                document.getElementById('signal').innerHTML = 'BUY';
+                document.getElementById('signal').style.color = '#00ff88';
+            } else if (data.price < 2640) {
+                document.getElementById('signal').innerHTML = 'SELL';
+                document.getElementById('signal').style.color = '#ff4466';
+            } else {
+                document.getElementById('signal').innerHTML = 'HOLD';
+                document.getElementById('signal').style.color = '#ffaa00';
             }
-        }
+        });
         
-        function updateMarketUI(data) {
-            document.getElementById('currentPrice').innerHTML = data.price.toFixed(2);
-            document.getElementById('dailyHigh').innerHTML = data.high.toFixed(2);
-            document.getElementById('dailyLow').innerHTML = data.low.toFixed(2);
-            document.getElementById('volume').innerHTML = (data.volume / 1000000).toFixed(1) + 'M';
-            document.getElementById('spreadValue').innerHTML = data.spread + ' pips';
-            
-            const changeElem = document.getElementById('priceChange');
-            changeElem.innerHTML = `${data.change > 0 ? '+' : ''}${data.change}%`;
-            changeElem.style.color = data.change > 0 ? '#00ff88' : '#ff4466';
-        }
+        socket.on('trade_result', (data) => {
+            addLog(`${data.action} ${data.volume} lots at $${data.price.toFixed(2)} | P&L: $${data.pnl.toFixed(2)}`);
+            loadAccount();
+        });
         
-        function updateAIUI(data) {
-            const container = document.getElementById('aiContainer');
-            const ais = [
-                { name: '📈 TREND AI', data: data.trend },
-                { name: '💧 LIQUIDITY AI', data: data.liquidity },
-                { name: '🌊 VOLATILITY AI', data: data.volatility },
-                { name: '📰 SENTIMENT AI', data: data.sentiment },
-                { name: '📊 ORDERFLOW AI', data: data.orderflow }
-            ];
-            
-            container.innerHTML = ais.map(ai => `
-                <div class="ai-card ai-${ai.data.action === 'BUY' ? 'buy' : (ai.data.action === 'SELL' ? 'sell' : 'neutral')}">
-                    <div class="flex-between">
-                        <span style="font-weight: 600;">${ai.name}</span>
-                        <span style="color: ${ai.data.action === 'BUY' ? '#00ff88' : (ai.data.action === 'SELL' ? '#ff4466' : '#ffaa00')}">
-                            ${ai.data.action} · ${ai.data.confidence}%
-                        </span>
-                    </div>
-                    <div class="text-muted" style="font-size: 10px;">${ai.data.reason}</div>
-                </div>
-            `).join('');
-            
-            // Calculate consensus
-            const buyCount = ais.filter(a => a.data.action === 'BUY').length;
-            const sellCount = ais.filter(a => a.data.action === 'SELL').length;
-            const consensus = buyCount > sellCount ? 'BUY' : (sellCount > buyCount ? 'SELL' : 'HOLD');
-            document.getElementById('finalConsensus').innerHTML = consensus;
-            document.getElementById('finalConsensus').style.color = consensus === 'BUY' ? '#00ff88' : (consensus === 'SELL' ? '#ff4466' : '#ffaa00');
-        }
-        
-        function addAlert(message, type) {
-            const container = document.getElementById('alertsContainer');
-            const alertDiv = document.createElement('div');
-            alertDiv.style.cssText = `
-                background: ${type === 'success' ? 'rgba(0,255,136,0.1)' : 'rgba(255,68,102,0.1)'};
-                border-left: 3px solid ${type === 'success' ? '#00ff88' : '#ff4466'};
-                padding: 8px;
-                border-radius: 6px;
-                margin-bottom: 6px;
-                font-size: 11px;
-            `;
-            alertDiv.innerHTML = message;
-            container.insertBefore(alertDiv, container.firstChild);
-            
-            while (container.children.length > 10) {
-                container.removeChild(container.lastChild);
-            }
-        }
-        
-        async function executeBuy() {
-            const volume = document.getElementById('tradeVolume').value;
-            const stopLoss = document.getElementById('stopLoss').value;
-            const takeProfit = document.getElementById('takeProfit').value;
-            
-            let url = `/api/trade/buy?volume=${volume}`;
-            if (stopLoss) url += `&stop_loss=${stopLoss}`;
-            if (takeProfit) url += `&take_profit=${takeProfit}`;
-            
+        async function loadAccount() {
             try {
-                const response = await fetch(url, { method: 'POST' });
-                const result = await response.json();
-                if (result.success) {
-                    addAlert(`✅ ${result.message}`, 'success');
-                } else {
-                    addAlert(`❌ Order failed`, 'error');
+            const res = await fetch('/api/account');
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('balance').innerHTML = `$${data.balance.toFixed(2)}`;
+                    document.getElementById('equity').innerHTML = `$${data.equity.toFixed(2)}`;
                 }
-            } catch (error) {
-                addAlert(`❌ Error: ${error.message}`, 'error');
-            }
+            } catch(e) {}
         }
         
-        async function executeSell() {
-            const volume = document.getElementById('tradeVolume').value;
-            const stopLoss = document.getElementById('stopLoss').value;
-            const takeProfit = document.getElementById('takeProfit').value;
-            
-            let url = `/api/trade/sell?volume=${volume}`;
-            if (stopLoss) url += `&stop_loss=${stopLoss}`;
-            if (takeProfit) url += `&take_profit=${takeProfit}`;
-            
+        async function executeTrade(action) {
+            const volume = document.getElementById('trade-volume').value;
             try {
-                const response = await fetch(url, { method: 'POST' });
-                const result = await response.json();
-                if (result.success) {
-                    addAlert(`✅ ${result.message}`, 'success');
-                } else {
-                    addAlert(`❌ Order failed`, 'error');
-                }
-            } catch (error) {
-                addAlert(`❌ Error: ${error.message}`, 'error');
+                const res = await fetch(`/api/trade/${action.toLowerCase()}?volume=${volume}`, { method: 'POST' });
+                const data = await res.json();
+                if (!data.success) addLog(`Order failed`);
+            } catch(e) {
+                addLog(`Error: ${e.message}`);
             }
         }
         
-        // Simulate risk metrics update
-        function updateRiskMetrics() {
-            const drawdown = (Math.random() * 5).toFixed(1);
-            const dailyPnl = (Math.random() * 200 - 100).toFixed(2);
-            document.getElementById('drawdown').innerHTML = `${drawdown}%`;
-            document.getElementById('dailyPnl').innerHTML = `${dailyPnl >= 0 ? '+' : ''}$${dailyPnl}`;
-            document.getElementById('dailyPnl').className = `stat-value ${dailyPnl >= 0 ? 'positive' : 'negative'}`;
+        function addLog(msg) {
+            const log = document.getElementById('log');
+            const div = document.createElement('div');
+            div.className = 'activity-item';
+            div.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            log.insertBefore(div, log.firstChild);
+            while(log.children.length > 30) log.removeChild(log.lastChild);
         }
         
-        // Initialize
-        connectWebSocket();
-        document.getElementById('buyBtn').addEventListener('click', executeBuy);
-        document.getElementById('sellBtn').addEventListener('click', executeSell);
-        setInterval(updateRiskMetrics, 5000);
+        async function logout() {
+            await fetch('/api/auth/logout', { method: 'POST' });
+            window.location.href = '/';
+        }
         
-        addAlert('🟢 Dashboard ready - Trading system online', 'success');
+        document.getElementById('buyBtn').onclick = () => executeTrade('BUY');
+        document.getElementById('sellBtn').onclick = () => executeTrade('SELL');
+        
+        loadAccount();
+        addLog('Dashboard ready');
     </script>
 </body>
 </html>
